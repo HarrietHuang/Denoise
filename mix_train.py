@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
 from torchvision import  transforms as T
 import torch as t
-from color_networks import define_G, define_D, GANLoss, get_scheduler, update_learning_rate,simplelayer#, get_style_model_and_losses, ContentLoss
+from color_networks import define_G, define_D, GANLoss, get_scheduler, update_learning_rate,simplelayer, my_Loss#, get_style_model_and_losses, ContentLoss
 from mix_dataset import datasets,get_training_testing_set
 from torch.utils.tensorboard import SummaryWriter
 
@@ -97,6 +97,9 @@ else:
     optimizer_g = optim.Adam([{'params': net_g.parameters()},{'params': simplelayer.parameters(), 'lr': 1e-3}],lr=opt.lr, betas=(opt.beta1, 0.999))
     #optimizer_g = optim.Adam([{net_g.parameters()},{simplelayer.parameters(), }], lr=opt.lr, betas=(opt.beta1, 0.999))
     optimizer_d = optim.Adam(net_d.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+thetaS = 1
+lossfn = my_Loss(thetaS).to(device) #instanciate loss function
+
 
 #simplelayer_scheduler = get_scheduler(optimizer_g, opt)
 # net_g_scheduler = get_scheduler(optimizer_g, opt)
@@ -110,6 +113,7 @@ for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
     total_loss_mse = 0
     total_loss_g = 0
     total_loss_d = 0
+    total_loss_s = 0
     #total_content_loss = 0
     
     for index, (blur, groundtruth, filename) in enumerate(train_dataloader):
@@ -171,7 +175,12 @@ for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
         ######################
       
         optimizer_g.zero_grad()
+        
+        #saturation
+        saturation_loss = lossfn(fake_b)
+        total_loss_s +=saturation_loss.item()
 
+        
         # First, G(A) should fake the discriminator
         fake_ab = torch.cat((real_a, fake_b), 1)
         pred_fake = net_d.forward(fake_ab)
@@ -180,19 +189,20 @@ for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
         # Second, G(A) = B
  
         loss_g_l1 = criterionL1(fake_b, real_b) * opt.lamb
-        loss_g = (loss_g_gan + loss_g_l1)*opt.gan_weight + mseloss * (1 - opt.gan_weight)
+        loss_g = (loss_g_gan + loss_g_l1)*opt.gan_weight + mseloss * (1 - opt.gan_weight) + saturation_loss * 0.5
         total_loss_g += loss_g.item() * opt.gan_weight - mseloss.item() * (1 - opt.gan_weight)      
         loss_g.backward(retain_graph=True)
         optimizer_g.step()
              #print('Style Loss : {:4f} Content Loss: {:4f}'.format(
                    # style_score.item(), content_score.item()))
-        print("===> Epoch[{}]({}/{}): Loss_D: {:.4f} Loss_G: {:.4f} MSELoss: {:.4f}  ".format(
-            epoch + opt.reload_epo_num, index, len(train_dataloader), loss_d.item(), loss_g.item()- mseloss.item(), mseloss.item()))
+        print("===> Epoch[{}]({}/{}): Loss_D: {:.4f} Loss_G: {:.4f} MSELoss: {:.4f} SatuationLoss: {:.4f} ".format(
+            epoch + opt.reload_epo_num, index, len(train_dataloader), loss_d.item(), loss_g.item()- mseloss.item(), mseloss.item(), saturation_loss.item()))
 
         if opt.ganloss: 
             writer.add_scalars('pix2pix', {'loss_d':(total_loss_d/len(train_dataloader)),
                                         'loss_g':total_loss_g/len(train_dataloader), 
-                                        'mse':total_loss_mse/len(train_dataloader)                                     
+                                        'mse':total_loss_mse/len(train_dataloader),
+                                        'saturation':total_loss_s/len(train_dataloader),
                                         }, epoch + opt.reload_epo_num)
         else:
             writer.add_scalars('pix2pix', {

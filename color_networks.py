@@ -1,4 +1,5 @@
 import torch
+import torch as t
 import torch.nn as nn
 from torch.nn import init
 import functools
@@ -549,3 +550,92 @@ def get_style_model_and_losses(cnn, content_img,
 
     return model , content_losses
 
+
+# def tvloss(y):
+    # reg_loss =  (
+    # t.sum(t.abs(y[:, :, :, :-1] - y[:, :, :, 1:])) + 
+    # t.sum(t.abs(y[:, :, :-1, :] - y[:, :, 1:, :])))
+    # return reg_loss
+
+class my_Loss(nn.Module):
+
+    #def __init__(self,thetaT= 1/6,thetaC = 1/6, thetaS = 1/6,thetaE = 1/6,thetaM = 1/6,thetaB=1/6):
+    def __init__(self, thetaS = 1/6):
+        super(my_Loss, self).__init__()
+        # self.thetaC = thetaC
+        self.thetaS = thetaS
+        # self.thetaE = thetaE
+        # self.thetaM = thetaM
+        # self.thetaT = thetaT
+        # self.thetaB = thetaB
+
+    #def forward(self,img,input1):
+    def forward(self,img):
+#         flt = t.ones_like(img)
+#         flt[:,:, 0:115, :630] = 0
+#         flt[:,:, -150:, -520:] = 0
+        
+        batch_size = img.size()[0]
+        device = t.device('cuda' if t.cuda.is_available() else 'cpu')
+        # maeloss = nn.L1Loss()
+        # MAELoss = maeloss(img, input1)
+        
+        # B_img = img
+        
+        # color_mean = [
+        # (B_img[0][0]).mean(), (B_img[0][1]).mean(),(B_img[0][2]).mean()]
+        
+        # #color_mean.sort()
+        # balance_loss = F.l1_loss(color_mean[0]-color_mean[1],color_mean[1]-color_mean[2])
+        
+        
+
+        # # contrast
+        # C_img = img
+        
+        # C_img =(C_img * t.tensor([[[[0.2989]], [[0.5870]], [[0.1140]]]]).to(device)).sum(dim=1,keepdim=True) #grayscale = 0.2989 R + 0.5870 G + 0.1140 B 
+        
+        # LAfilter = t.Tensor([[0, 1, 0],
+                             # [1, -4, 1],
+                             # [0, 1, 0]])/4
+
+        # f = LAfilter.view(1,1,3,3).to(device)
+        # #f = f.expand(1,3,3,3)
+        # C_img = F.pad(C_img, (1, 1, 1, 1), mode='replicate')
+        # C_img = t.abs(F.conv2d(C_img,f,stride= 1,padding=0))
+        # contrast_loss = (F.mse_loss(t.full_like(C_img,4),C_img) ) / batch_size - t.mean(C_img)  #/2
+        
+        # Saturation
+        S_img = img
+        
+        mu = S_img.mean(dim = 1,keepdim=True)
+        R = S_img[:,0,:,:].unsqueeze(dim=1)
+        G = S_img[:,1,:,:].unsqueeze(dim=1)
+        B = S_img[:,2,:,:].unsqueeze(dim=1)
+        S_img = t.sqrt(((R - mu )**2 + (G - mu )**2 + (B - mu )**2) / 3)
+        saturation_loss =  (F.mse_loss(t.full_like(S_img,0.5),S_img)) / batch_size #/2
+        
+        # # Expospure
+        # sig2 = 0.2**2
+        # Expo_img = img
+        # R = t.exp((Expo_img[:,0,:,:].unsqueeze(dim=1) - 0.5) **2 / sig2 * -0.4 )
+        # G = t.exp((Expo_img[:,1,:,:].unsqueeze(dim=1) - 0.5) **2 / sig2 * -0.4 )
+        # B = t.exp((Expo_img[:,2,:,:].unsqueeze(dim=1) - 0.5) **2 / sig2 * -0.4 )
+        # Expo_img = R * G * B
+        # exposure_loss =  F.mse_loss(t.full_like(Expo_img,1),Expo_img) / batch_size #/2
+        # #TVLoss
+        
+        # h_output = img.size()[2]
+        # w_output = img.size()[3]
+        # count_h =  (img.size()[2]-1) * img.size()[3]
+        # count_w = img.size()[2] * (img.size()[3] - 1)
+        # h_tv = t.pow((img[:,:,1:,:]-img[:,:,:h_output-1,:]),2).sum()
+        # w_tv = t.pow((img[:,:,:,1:]-img[:,:,:,:w_output-1]),2).sum()
+
+        # tv_loss = ((h_tv/count_h+w_tv/count_w)/batch_size)
+        
+        #loss =  self.thetaC * contrast_loss  + self.thetaS * saturation_loss + self.thetaE * exposure_loss + self.thetaM * MSELoss +self.thetaT * tv_loss 
+        #loss =   self.thetaM * MAELoss +self.thetaC * contrast_loss + self.thetaT * tv_loss + thetaS * saturation_loss # + self.thetaE * exposure_loss #+ self.thetaB *balance_loss
+#         loss =  self.thetaS * saturation_loss + self.thetaE * exposure_loss + self.thetaM * MSELoss #self.thetaT * tv_loss +
+#         print(self.thetaC ,self.thetaS  , self.thetaM  , self.thetaT  , self.thetaE  + self.thetaB )
+        return  saturation_loss#,loss,tv_loss,contrast_loss,  exposure_loss, MAELoss,balance_loss
