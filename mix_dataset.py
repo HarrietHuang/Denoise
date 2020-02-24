@@ -74,6 +74,6 @@ def get_training_testing_set():
     #print('get_mean_and_std',get_mean_and_std(train_dataset),'   ',get_mean_and_std(test_dataset))
     # print('mean_std_v3',mean_std_v3(train_dataset),'   ',mean_std_v3(test_dataset))
     #[len(dataset)-3,3]
-    train_dataloader = data.DataLoader(train_dataset, batch_size=1, shuffle=True,num_workers=0,pin_memory=True)
+    train_dataloader = data.DataLoader(train_dataset, batch_size=2, shuffle=True,num_workers=0,pin_memory=True)
     test_dataloader = data.DataLoader(test_dataset, batch_size=1, shuffle=False,num_workers=0,pin_memory=True)
     return train_dataloader, test_dataloader

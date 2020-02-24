@@ -22,7 +22,7 @@ import copy
 
 # Training settings
 parser = argparse.ArgumentParser(description='pix2pix-pytorch-implementation')
-parser.add_argument('--dataset',default='color_gan_vgg' , help='facades')
+parser.add_argument('--dataset',default='color_gan_satuation' , help='facades')
 parser.add_argument('--batch_size', type=int, default=1, help='training batch size')
 parser.add_argument('--test_batch_size', type=int, default=1, help='testing batch size')
 parser.add_argument('--direction', type=str, default='a2b', help='a2b or b2a')
@@ -80,9 +80,9 @@ criterionMSE = nn.MSELoss().to(device)
 # d_load_state_path=r'D:\pix2pix-pytorch-master\checkpoint\color_gan_Nlinear\netD_model_epoch_80.pth'
 #simplelayer_state_path = r'C:\Users\admin\Download\nccu\project\pix2pix-pytorch-master\checkpoint\jupyter_color_unet\checkpoint_100.pt'
 
-# if simplelayer_state_path:
+#if simplelayer_state_path:
     # # print('===> loading models')
-    # # #simplelayer.load_state_dict(t.load(simplelayer_state_path))
+    #simplelayer.load_state_dict(t.load(simplelayer_state_path))
      # net_d = t.load(d_load_state_path)
      # net_g = t.load(g_load_state_path)
 
@@ -94,9 +94,9 @@ print(simplelayer)
 if not opt.ganloss:   
     optimizer = optim.Adam(simplelayer.parameters(), lr=0.0001, betas=(0.9, 0.999), eps=1e-08, weight_decay=0, amsgrad=True)
 else:
-    optimizer_g = optim.Adam([{'params': net_g.parameters()},{'params': simplelayer.parameters(), 'lr': 1e-3}],lr=opt.lr, betas=(opt.beta1, 0.999))
+    optimizer_g = optim.Adam([{'params': net_g.parameters()},{'params': simplelayer.parameters(), 'lr': 2e-4}],lr=opt.lr, betas=(opt.beta1, 0.9))
     #optimizer_g = optim.Adam([{net_g.parameters()},{simplelayer.parameters(), }], lr=opt.lr, betas=(opt.beta1, 0.999))
-    optimizer_d = optim.Adam(net_d.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+    optimizer_d = optim.Adam(net_d.parameters(), lr=opt.lr, betas=(opt.beta1, 0.9))
 thetaS = 1
 lossfn = my_Loss(thetaS).to(device) #instanciate loss function
 
@@ -117,7 +117,7 @@ for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
     #total_content_loss = 0
     
     for index, (blur, groundtruth, filename) in enumerate(train_dataloader):
-
+        torch.cuda.empty_cache()
         simplelayer.train()
         blur = blur.to(device)
         groundtruth = groundtruth.to(device)
@@ -163,10 +163,8 @@ for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
         # Combined D loss
         loss_d = (loss_d_fake + loss_d_real) * 0.5
         total_loss_d += loss_d.item()
-        if epoch==1:
-            loss_d.backward(retain_graph=True)
-        else:
-            loss_d.backward(retain_graph=True)
+
+        loss_d.backward(retain_graph=True)
        
         optimizer_d.step()
 
@@ -189,9 +187,9 @@ for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
         # Second, G(A) = B
  
         loss_g_l1 = criterionL1(fake_b, real_b) * opt.lamb
-        loss_g = (loss_g_gan + loss_g_l1)*opt.gan_weight + mseloss * (1 - opt.gan_weight) + saturation_loss * 0.5
-        total_loss_g += loss_g.item() * opt.gan_weight - mseloss.item() * (1 - opt.gan_weight)      
-        loss_g.backward(retain_graph=True)
+        loss_g = (loss_g_gan + loss_g_l1)*opt.gan_weight + mseloss * (1 - opt.gan_weight) + saturation_loss * 0.2
+        total_loss_g += (loss_g_gan.item() + loss_g_l1.item())
+        loss_g.backward()
         optimizer_g.step()
              #print('Style Loss : {:4f} Content Loss: {:4f}'.format(
                    # style_score.item(), content_score.item()))
@@ -215,45 +213,45 @@ for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):
     
     
     # test
-    
-    avg_psnr = 0
-    for blur, groundtruth, filename in testing_data_loader:
-        blur, groundtruth = blur.to(device), groundtruth.to(device)
-        
-        simplelayer.eval()
-        if opt.ganloss:
-            _,prediction = simplelayer(blur)
-        else:
-            net_g = net_g.to(device)
-            net_g.eval()
-            _,prediction = simplelayer(blur)
-            prediction = net_g(prediction)
-
-        #checkpoint
-        if epoch  %20 == 0:
-        #if epoch == 1:
-            if not os.path.exists("checkpoint"):
-                os.mkdir("checkpoint")
-            if not os.path.exists(os.path.join("checkpoint", opt.dataset)):
-                os.mkdir(os.path.join("checkpoint", opt.dataset))
-            net_g_model_out_path = "checkpoint/{}/netG_model_epoch_{}.pth".format(opt.dataset, epoch + opt.reload_epo_num)
-            net_d_model_out_path = "checkpoint/{}/netD_model_epoch_{}.pth".format(opt.dataset, epoch + opt.reload_epo_num)
-            simplelayer_out_path = "checkpoint/{}/simplelayer_model_epoch_{}.pth".format(opt.dataset, epoch + opt.reload_epo_num)
+    with torch.no_grad():
+        avg_psnr = 0
+        for blur, groundtruth, filename in testing_data_loader:
+            blur, groundtruth = blur.to(device), groundtruth.to(device)
             
-            torch.save(simplelayer, simplelayer_out_path)
-            torch.save(net_g, net_g_model_out_path)
-            torch.save(net_d, net_d_model_out_path)
-            print("Checkpoint saved to {}".format("checkpoint" + opt.dataset))
-            #count=0
-            #save image
-        if epoch % 3 == 0 :
-            prediction = prediction[0].cpu() * test_std.view(3,1,1) + test_mean.view(3,1,1)
-            image_list = T.ToPILImage()(prediction.cpu())
+            simplelayer.eval()
+            if opt.ganloss:
+                _,prediction = simplelayer(blur)
+            else:
+                net_g = net_g.to(device)
+                net_g.eval()
+                _,prediction = simplelayer(blur)
+                prediction = net_g(prediction)
 
-            filepath = r'D:\pix2pix-pytorch-master\{}'.format(opt.dataset)
-            if not os.path.exists(filepath):
-                os.mkdir(filepath,7777)
-            image_list.save(filepath + r'\{}_ganloss0_4.png'.format(filename[0].replace('.png','')),'png')
+            #checkpoint
+            if epoch  %10 == 0:
+            #if epoch == 1:
+                if not os.path.exists("checkpoint"):
+                    os.mkdir("checkpoint")
+                if not os.path.exists(os.path.join("checkpoint", opt.dataset)):
+                    os.mkdir(os.path.join("checkpoint", opt.dataset))
+                net_g_model_out_path = "checkpoint/{}/netG_model_epoch_{}.pth".format(opt.dataset, epoch + opt.reload_epo_num)
+                net_d_model_out_path = "checkpoint/{}/netD_model_epoch_{}.pth".format(opt.dataset, epoch + opt.reload_epo_num)
+                simplelayer_out_path = "checkpoint/{}/simplelayer_model_epoch_{}.pth".format(opt.dataset, epoch + opt.reload_epo_num)
+                
+                torch.save(simplelayer, simplelayer_out_path)
+                torch.save(net_g, net_g_model_out_path)
+                torch.save(net_d, net_d_model_out_path)
+                print("Checkpoint saved to {}".format("checkpoint" + opt.dataset))
+                #count=0
+                #save image
+            if epoch % 3 == 0 :
+                prediction = prediction[0].cpu() * test_std.view(3,1,1) + test_mean.view(3,1,1)
+                image_list = T.ToPILImage()(prediction.cpu())
+
+                filepath = r'D:\pix2pix-pytorch-master\{}'.format(opt.dataset)
+                if not os.path.exists(filepath):
+                    os.mkdir(filepath,7777)
+                image_list.save(filepath + r'\{}_ganloss0_4.png'.format(filename[0].replace('.png','')),'png')
 
 
     

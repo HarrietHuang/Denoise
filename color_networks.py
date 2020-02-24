@@ -612,7 +612,7 @@ class my_Loss(nn.Module):
         R = S_img[:,0,:,:].unsqueeze(dim=1)
         G = S_img[:,1,:,:].unsqueeze(dim=1)
         B = S_img[:,2,:,:].unsqueeze(dim=1)
-        S_img = t.sqrt(((R - mu )**2 + (G - mu )**2 + (B - mu )**2) / 3)
+        S_img = t.sqrt(((R - mu )**2 + (G - mu )**2 + (B - mu )**2) / 3 + 1e-10) 
         saturation_loss =  (F.mse_loss(t.full_like(S_img,0.5),S_img)) / batch_size #/2
         
         # # Expospure
